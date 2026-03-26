@@ -120,7 +120,7 @@ export class Chunker {
 
     // 靜音偵測：計算 RMS 音量，太低就跳過（防止 Whisper 幻覺）
     const rms = this.calculateRms(fullPcm);
-    if (rms < 50) {
+    if (rms < 5) {
       // 音量極低（接近靜音），跳過此 chunk 不送轉譯
       const silentChunk: AudioChunk = {
         index,
