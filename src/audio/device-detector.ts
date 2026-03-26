@@ -68,35 +68,27 @@ export class DeviceDetector {
     const devices: AudioDevice[] = [];
     const lines = stderr.split('\n');
 
-    let isAudioSection = false;
-
     for (const line of lines) {
-      // DirectShow 音訊裝置區段
-      if (line.includes('DirectShow audio devices')) {
-        isAudioSection = true;
-        continue;
-      }
+      // 跳過 "Alternative name" 行
+      if (line.includes('Alternative name')) continue;
 
-      // 影片裝置區段開始時結束音訊區段
-      if (line.includes('DirectShow video devices')) {
-        isAudioSection = false;
-        continue;
-      }
+      // 匹配含 (audio) 標記的裝置行，例如:
+      // [dshow @ ...] "Microphone Array (適用於...)" (audio)
+      // [dshow @ ...] "麥克風 (ToDesk Virtual Audio)" (audio)
+      if (!line.includes('(audio)')) continue;
 
-      if (!isAudioSection) continue;
-
-      // 匹配裝置名稱行，例如: [dshow @ ...] "Device Name" (audio)
-      // 也支援 CJK 裝置名稱
       const nameMatch = line.match(/"\s*(.+?)\s*"/);
-      if (nameMatch && !line.includes('Alternative name')) {
+      if (nameMatch) {
         const deviceName = nameMatch[1];
 
-        // 判斷是系統音訊還是麥克風
+        // 判斷是系統音訊（loopback）還是麥克風
+        const lowerName = deviceName.toLowerCase();
         const isLoopback =
-          deviceName.toLowerCase().includes('loopback') ||
-          deviceName.toLowerCase().includes('stereo mix') ||
-          deviceName.toLowerCase().includes('wasapi') ||
-          deviceName.toLowerCase().includes('virtual');
+          lowerName.includes('loopback') ||
+          lowerName.includes('stereo mix') ||
+          lowerName.includes('wasapi') ||
+          lowerName.includes('what u hear') ||
+          lowerName.includes('wave out');
 
         devices.push({
           name: deviceName,
