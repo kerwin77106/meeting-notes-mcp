@@ -118,6 +118,21 @@ export class Chunker {
       : index * this.config.chunkDurationMs - this.config.overlapMs;
     const endTimeMs = startTimeMs + chunkDurationMs + (this.overlapBuffer.length > 0 ? this.config.overlapMs : 0);
 
+    // 靜音偵測：計算 RMS 音量，太低就跳過（防止 Whisper 幻覺）
+    const rms = this.calculateRms(fullPcm);
+    if (rms < 50) {
+      // 音量極低（接近靜音），跳過此 chunk 不送轉譯
+      const silentChunk: AudioChunk = {
+        index,
+        buffer: Buffer.alloc(0),
+        startTimeMs,
+        endTimeMs,
+        overlapStartMs: index > 0 ? this.config.overlapMs : 0,
+        overlapEndMs: this.config.overlapMs,
+      };
+      return silentChunk;
+    }
+
     // PCM → MP3 轉換
     const mp3Buffer = await this.convertToMp3(fullPcm);
     const chunk: AudioChunk = {
@@ -138,6 +153,23 @@ export class Chunker {
     }
 
     return chunk;
+  }
+
+  /**
+   * 計算 16-bit PCM 資料的 RMS 音量。
+   * 回傳值 0~32768，值越大越大聲。靜音約為 0~50。
+   */
+  private calculateRms(pcmData: Buffer): number {
+    let sumSquares = 0;
+    const sampleCount = Math.floor(pcmData.length / 2); // 16-bit = 2 bytes per sample
+    if (sampleCount === 0) return 0;
+
+    for (let i = 0; i < pcmData.length - 1; i += 2) {
+      const sample = pcmData.readInt16LE(i);
+      sumSquares += sample * sample;
+    }
+
+    return Math.sqrt(sumSquares / sampleCount);
   }
 
   /**

@@ -1,6 +1,6 @@
 {
   "name": "meeting-notes-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "MCP Server for recording meetings and generating notes in Claude Code",
   "bin": {
     "meeting-notes-mcp": "./dist/index.js"

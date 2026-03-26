@@ -205,6 +205,11 @@ export class TranscriptionQueue {
   }
 
   private async processItem(item: QueueItem): Promise<TranscriptionResult> {
+    // 跳過靜音 chunk（buffer 為空表示音量太低）
+    if (item.chunk.buffer.length === 0) {
+      return { text: '', segments: [], duration: 0, language: '' };
+    }
+
     return this.whisperClient.transcribe(
       item.chunk.buffer,
       item.language,
