@@ -21,45 +21,44 @@ MCP Server for recording meetings and generating notes in Claude Code.
 
 ## Installation
 
-### 方式 A：從 npm 安裝（發佈後可用）
+### 一鍵安裝（推薦）
+
+只需一行指令，將 Groq API Key 替換為你自己的：
 
 ```bash
-claude mcp add meeting-notes npx meeting-notes-mcp
+claude mcp add meeting-notes -s user -e GROQ_API_KEY=gsk_你的Key -- npx meeting-notes-mcp
 ```
 
-### 方式 B：從 GitHub 安裝（現在就能用）
+> **Groq API Key 免費申請**：前往 [https://console.groq.com](https://console.groq.com) 註冊即可取得。
 
-```bash
-# 1. Clone 專案
-git clone https://github.com/kerwin77106/meeting-notes-mcp.git
-cd meeting-notes-mcp
+這行指令做了三件事：
+1. 從 npm 下載 `meeting-notes-mcp`
+2. 註冊為全域 MCP Server（`-s user`，所有專案都能用）
+3. 將 Groq API Key 注入 MCP Server 環境變數（`-e`）
 
-# 2. 安裝依賴並編譯
-npm install
-npm run build
+安裝完成後，**重啟 Claude Code** 即可使用。
 
-# 3. 註冊到 Claude Code（使用本地路徑）
-claude mcp add meeting-notes node /path/to/meeting-notes-mcp/dist/index.js
-```
-
-### 設定 Groq API Key
-
-```bash
-# Windows PowerShell
-$env:GROQ_API_KEY = "gsk_xxxxxxxxxxxx"
-
-# macOS / Linux
-export GROQ_API_KEY="gsk_xxxxxxxxxxxx"
-```
-
-免費申請 Key：[https://console.groq.com](https://console.groq.com)
-
-### （可選）安裝 Skill
+### （可選）安裝 Skill 快捷指令
 
 ```bash
 npx meeting-notes-mcp --install-skill
-# 或手動複製
-cp skills/meeting.md ~/.claude/commands/meeting.md
+```
+
+安裝後可在 Claude Code 中使用 `/meeting` 快捷指令。
+
+### 從 GitHub 原始碼安裝
+
+如果你想自行修改或貢獻程式碼：
+
+```bash
+# 1. Clone 並編譯
+git clone https://github.com/kerwin77106/meeting-notes-mcp.git
+cd meeting-notes-mcp
+npm install
+npm run build
+
+# 2. 註冊到 Claude Code（將 Groq API Key 替換為你自己的）
+claude mcp add meeting-notes -s user -e GROQ_API_KEY=gsk_你的Key -- node /你的路徑/meeting-notes-mcp/dist/index.js
 ```
 
 ## Usage
