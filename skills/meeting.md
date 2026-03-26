@@ -25,7 +25,8 @@ Session ID: {session_id}
 
 ## stop（停止錄音並生成紀錄）
 
-1. 呼叫 MCP Tool `stop_recording`，取得完整逐字稿
+1. 先用 `get_transcript` 查詢目前的 active session（不需要使用者提供 session_id，從對話上下文中取得之前 start_recording 回傳的 session_id）
+2. 呼叫 MCP Tool `stop_recording`，傳入該 session_id，取得完整逐字稿
 2. 根據逐字稿，使用以下 Prompt 生成結構化會議紀錄：
 
 你是一位專業的會議紀錄助理。根據以下逐字稿，請生成結構化的會議紀錄。
@@ -62,9 +63,10 @@ Session ID: {session_id}
 
 ## status（查看即時狀態）
 
-1. 呼叫 MCP Tool `get_transcript`
-2. 顯示錄音狀態、已錄製時長、已轉譯 chunk 數
-3. 顯示最近 5 段逐字稿
+1. 從對話上下文中取得之前 start_recording 回傳的 session_id（不需要使用者提供）
+2. 呼叫 MCP Tool `get_transcript`，傳入該 session_id
+3. 顯示錄音狀態、已錄製時長、已轉譯 chunk 數
+4. 顯示最近 5 段逐字稿
 
 ## list（列出歷史紀錄）
 
