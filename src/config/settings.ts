@@ -11,6 +11,7 @@ import { SUPPORTED_LANGUAGES } from '../types.js';
 
 const DEFAULT_CONFIG: AppConfig = {
   groqApiKey: null,
+  deepgramApiKey: null,
   language: 'zh-TW',
   outputDir: path.join(os.homedir(), 'meeting-notes'),
   chunkDurationMs: 30000,
@@ -42,6 +43,9 @@ export class Settings {
         if (parsed.groqApiKey !== undefined) {
           this.config.groqApiKey = parsed.groqApiKey;
         }
+        if (parsed.deepgramApiKey !== undefined) {
+          this.config.deepgramApiKey = parsed.deepgramApiKey;
+        }
         if (parsed.language !== undefined && SUPPORTED_LANGUAGES.includes(parsed.language)) {
           this.config.language = parsed.language;
         }
@@ -59,10 +63,15 @@ export class Settings {
       // 檔案不存在或 JSON 解析失敗，使用預設值
     }
 
-    // 環境變數 GROQ_API_KEY 優先
-    const envKey = process.env['GROQ_API_KEY'];
-    if (envKey) {
-      this.config.groqApiKey = envKey;
+    // 環境變數優先
+    const envGroqKey = process.env['GROQ_API_KEY'];
+    if (envGroqKey) {
+      this.config.groqApiKey = envGroqKey;
+    }
+
+    const envDeepgramKey = process.env['DEEPGRAM_API_KEY'];
+    if (envDeepgramKey) {
+      this.config.deepgramApiKey = envDeepgramKey;
     }
   }
 
@@ -95,6 +104,10 @@ export class Settings {
     return this.config.groqApiKey;
   }
 
+  get deepgramApiKey(): string | null {
+    return this.config.deepgramApiKey;
+  }
+
   get language(): SupportedLanguage {
     return this.config.language;
   }
@@ -115,6 +128,10 @@ export class Settings {
 
   setGroqApiKey(key: string | null): void {
     this.config.groqApiKey = key;
+  }
+
+  setDeepgramApiKey(key: string | null): void {
+    this.config.deepgramApiKey = key;
   }
 
   setLanguage(lang: SupportedLanguage): void {

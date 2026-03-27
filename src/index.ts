@@ -9,7 +9,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { SessionManager } from './session/session-manager.js';
 import { Settings } from './config/settings.js';
 import { UsageTracker } from './stt/usage-tracker.js';
-import { GroqWhisperClient } from './stt/groq-whisper.js';
+import { DeepgramClient } from './stt/deepgram-client.js';
 import { TranscriptionQueue } from './stt/transcription-queue.js';
 import { startRecordingTool } from './tools/start-recording.js';
 import { stopRecordingTool } from './tools/stop-recording.js';
@@ -67,9 +67,9 @@ async function main(): Promise<void> {
 
   const sessionManager = new SessionManager();
 
-  // 建立 Groq Whisper Client（API Key 可能為 null，在 start_recording 時才檢查）
-  const groqApiKey = settings.groqApiKey ?? '';
-  const whisperClient = new GroqWhisperClient(groqApiKey);
+  // 建立 Deepgram Client（API Key 可能為 null，在 start_recording 時才檢查）
+  const deepgramApiKey = settings.deepgramApiKey ?? '';
+  const deepgramClient = new DeepgramClient(deepgramApiKey);
 
   const transcriptionQueue = new TranscriptionQueue(
     {
@@ -78,7 +78,7 @@ async function main(): Promise<void> {
       retryDelayMs: 1000,
       timeoutMs: 30000,
     },
-    whisperClient,
+    deepgramClient,
     usageTracker,
   );
 

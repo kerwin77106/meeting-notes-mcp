@@ -4,8 +4,19 @@ import {
   TranscriptionResult,
   SupportedLanguage,
 } from '../types.js';
-import { GroqWhisperClient } from './groq-whisper.js';
 import { UsageTracker } from './usage-tracker.js';
+
+/**
+ * STT Client 介面 — GroqWhisperClient 和 DeepgramClient 皆可適用。
+ */
+interface SttClient {
+  transcribe(
+    chunkBuffer: Buffer,
+    language: SupportedLanguage,
+    chunkIndex: number,
+    chunkOffsetMs?: number,
+  ): Promise<TranscriptionResult>;
+}
 
 type TranscriptionCompleteCallback = (
   sessionId: string,
@@ -38,7 +49,7 @@ interface WaitHandle {
 
 export class TranscriptionQueue {
   private config: QueueConfig;
-  private whisperClient: GroqWhisperClient;
+  private sttClient: SttClient;
   private usageTracker: UsageTracker;
 
   private queue: QueueItem[] = [];
@@ -47,9 +58,9 @@ export class TranscriptionQueue {
   private onFailedCallbacks: TranscriptionFailedCallback[] = [];
   private waitHandles: WaitHandle[] = [];
 
-  constructor(config: QueueConfig, whisperClient: GroqWhisperClient, usageTracker: UsageTracker) {
+  constructor(config: QueueConfig, sttClient: SttClient, usageTracker: UsageTracker) {
     this.config = config;
-    this.whisperClient = whisperClient;
+    this.sttClient = sttClient;
     this.usageTracker = usageTracker;
   }
 
@@ -210,7 +221,7 @@ export class TranscriptionQueue {
       return { text: '', segments: [], duration: 0, language: '' };
     }
 
-    return this.whisperClient.transcribe(
+    return this.sttClient.transcribe(
       item.chunk.buffer,
       item.language,
       item.chunk.index,

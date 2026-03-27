@@ -104,11 +104,11 @@ export const startRecordingTool = {
       };
     }
 
-    // 3. 檢查 Groq API Key
-    const groqApiKey = settings.groqApiKey;
-    if (!groqApiKey) {
+    // 3. 檢查 Deepgram API Key
+    const deepgramApiKey = settings.deepgramApiKey;
+    if (!deepgramApiKey) {
       return {
-        content: [{ type: 'text', text: JSON.stringify({ error: 'GROQ_API_KEY_MISSING', message: '未設定 Groq API Key。請設定環境變數 GROQ_API_KEY 或在 ~/.meeting-notes-mcp/config.json 中設定' }) }],
+        content: [{ type: 'text', text: JSON.stringify({ error: 'DEEPGRAM_API_KEY_MISSING', message: '未設定 Deepgram API Key。請設定環境變數 DEEPGRAM_API_KEY 或在 ~/.meeting-notes-mcp/config.json 中設定' }) }],
         isError: true,
       };
     }

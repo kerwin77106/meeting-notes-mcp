@@ -48,6 +48,7 @@ export interface QueueConfig {
 // 應用設定
 export interface AppConfig {
   groqApiKey: string | null;
+  deepgramApiKey: string | null;
   language: SupportedLanguage;
   outputDir: string;
   chunkDurationMs: number;
@@ -176,6 +177,8 @@ export type ErrorCode =
   | 'MICROPHONE_PERMISSION_DENIED'
   | 'GROQ_API_KEY_MISSING'
   | 'GROQ_API_KEY_INVALID'
+  | 'DEEPGRAM_API_KEY_MISSING'
+  | 'DEEPGRAM_API_KEY_INVALID'
   | 'UNSUPPORTED_PLATFORM'
   | 'NATIVE_MODULE_MISSING'
   | 'VALIDATION_ERROR'

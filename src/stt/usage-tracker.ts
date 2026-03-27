@@ -4,7 +4,7 @@ import { UsageData } from '../types.js';
 
 const DEFAULT_USAGE: UsageData = {
   dailyUsedSeconds: 0,
-  dailyLimitSeconds: 14400, // Groq 免費額度：4 小時/天
+  dailyLimitSeconds: 86400, // Deepgram：無嚴格每日限制，設為 24 小時
   warningThresholdPercent: 80,
   lastResetDate: '',
   totalUsedSeconds: 0,

@@ -118,9 +118,9 @@ export class Chunker {
       : index * this.config.chunkDurationMs - this.config.overlapMs;
     const endTimeMs = startTimeMs + chunkDurationMs + (this.overlapBuffer.length > 0 ? this.config.overlapMs : 0);
 
-    // 靜音偵測：計算 RMS 音量，太低就跳過（防止 Whisper 幻覺）
+    // 靜音偵測：計算 RMS 音量，僅過濾完全靜音（Deepgram 不會幻覺，無需嚴格過濾）
     const rms = this.calculateRms(fullPcm);
-    if (rms < 5) {
+    if (rms < 1) {
       // 音量極低（接近靜音），跳過此 chunk 不送轉譯
       const silentChunk: AudioChunk = {
         index,
