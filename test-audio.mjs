@@ -63,7 +63,8 @@ for (const dev of loopbackDevices) {
     });
 
     io.on('error', (err) => {
-      stats[dev.id].error = err.message.substring(0, 40);
+      const msg = (err && err.message) ? err.message : String(err);
+      if (stats[dev.id]) stats[dev.id].error = msg.substring(0, 40);
     });
 
     io.start();

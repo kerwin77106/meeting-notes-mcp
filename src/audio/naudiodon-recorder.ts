@@ -1,4 +1,8 @@
 import { PassThrough } from 'node:stream';
+import { spawn, ChildProcess } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { RecorderStatus } from '../types.js';
 import { AudioRecorder } from './recorder.js';
 import { NaudiodonDeviceDetector, LoopbackDevice, MicDevice } from './naudiodon-device-detector.js';
@@ -12,6 +16,9 @@ const naudiodon = require('naudiodon');
 const TARGET_RATE = 16000;
 const TARGET_CHANNELS = 1;
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const WASAPI_LOOPBACK_SCRIPT = join(__dirname, '..', '..', 'tools', 'wasapi-loopback.py');
+
 /**
  * naudiodon (PortAudio) 錄音器。
  * 支援 WDM-KS loopback 系統音訊捕捉，相容藍芽耳機。
@@ -21,6 +28,7 @@ export class NaudiodonRecorder implements AudioRecorder {
   private loopbackDevice: LoopbackDevice | null = null;
   private micDevice: MicDevice | null = null;
 
+  private loopbackProcess: ChildProcess | null = null;
   private loopbackStream: ReturnType<typeof naudiodon.AudioIO> | null = null;
   private micStream: ReturnType<typeof naudiodon.AudioIO> | null = null;
   private output: PassThrough | null = null;
@@ -105,6 +113,7 @@ export class NaudiodonRecorder implements AudioRecorder {
   async stop(): Promise<void> {
     this.isRecording = false;
 
+    try { this.loopbackProcess?.kill(); } catch { /* ignore */ }
     try { this.loopbackStream?.quit(); } catch { /* ignore */ }
     try { this.micStream?.quit(); } catch { /* ignore */ }
 
@@ -120,6 +129,7 @@ export class NaudiodonRecorder implements AudioRecorder {
       this.output.end();
     }
 
+    this.loopbackProcess = null;
     this.loopbackStream = null;
     this.micStream = null;
     this.output = null;
@@ -145,7 +155,12 @@ export class NaudiodonRecorder implements AudioRecorder {
   // ---- 內部方法 ----
 
   private startLoopbackStream(): void {
-    // 依優先順序嘗試所有 loopback 候選，遇到錯誤自動換下一個
+    // 優先嘗試 Python WASAPI loopback（支援藍芽耳機系統音訊）
+    if (existsSync(WASAPI_LOOPBACK_SCRIPT) && this.tryOpenPythonLoopback()) {
+      return;
+    }
+
+    // Fallback：依優先順序嘗試 naudiodon loopback 候選
     const candidates = this.loopbackCandidates.length > 0
       ? this.loopbackCandidates
       : (this.loopbackDevice ? [this.loopbackDevice] : []);
@@ -159,6 +174,49 @@ export class NaudiodonRecorder implements AudioRecorder {
 
     console.error('[NaudiodonRecorder] All loopback candidates failed');
     this.hasLoopback = false;
+  }
+
+  private tryOpenPythonLoopback(): boolean {
+    try {
+      const proc = spawn('python', [WASAPI_LOOPBACK_SCRIPT], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      proc.on('error', (err: Error) => {
+        console.error('[NaudiodonRecorder] Python loopback error:', err.message);
+        if (this.isRecording) this.hasLoopback = false;
+      });
+
+      proc.on('exit', (code: number | null) => {
+        if (code !== 0 && code !== null && this.isRecording) {
+          console.error('[NaudiodonRecorder] Python loopback exited with code:', code);
+          this.hasLoopback = false;
+        }
+      });
+
+      proc.stderr!.on('data', (data: Buffer) => {
+        console.error('[wasapi-loopback]', data.toString().trim());
+      });
+
+      proc.stdout!.on('data', (chunk: Buffer) => {
+        if (!this.isRecording || !this.output) return;
+        // Python 腳本已輸出 16kHz mono int16，不需 resample
+        if (this.mixMode) {
+          this.sysBuffer = Buffer.concat([this.sysBuffer, chunk]);
+          this.tryMix();
+        } else {
+          this.output.push(chunk);
+        }
+      });
+
+      this.loopbackProcess = proc;
+      console.error('[NaudiodonRecorder] Python WASAPI loopback started');
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[NaudiodonRecorder] Failed to start Python loopback:', msg);
+      return false;
+    }
   }
 
   private tryOpenLoopback(dev: LoopbackDevice): boolean {

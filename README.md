@@ -19,6 +19,7 @@ MCP Server for recording meetings and generating notes in Claude Code.
 - [Node.js](https://nodejs.org/) 20+
 - [Claude Code](https://claude.ai/code)（已安裝並登入）
 - [Deepgram API Key](https://console.deepgram.com)（免費申請，送 $200 credit）
+- **Windows 使用者額外需要：** Python 3.x + `soundcard`、`numpy` 套件（用於藍芽系統音訊捕捉）
 
 ## Installation
 
@@ -28,32 +29,21 @@ MCP Server for recording meetings and generating notes in Claude Code.
 2. 建立 API Key，複製備用（格式像 `1de40672c160484c...`）
 3. 新帳號自動獲得 **$200 美金免費額度**（約可錄音 775+ 小時）
 
-### Step 2：一鍵安裝
+### Step 2（Windows）：安裝 Python 音訊套件
 
-將 `你的_DEEPGRAM_API_KEY` 替換為你的 Deepgram API Key：
-
-```bash
-claude mcp add meeting-notes -s user -e DEEPGRAM_API_KEY=你的_DEEPGRAM_API_KEY -- npx meeting-notes-mcp
-```
-
-這行指令做了三件事：
-1. 從 npm 下載 `meeting-notes-mcp`
-2. 註冊為**全域** MCP Server（`-s user`，所有專案都能用）
-3. 將 Deepgram API Key 注入 MCP Server 環境變數
-
-### Step 3：重啟 Claude Code
-
-安裝後需要**重啟 Claude Code** 才會載入新的 MCP Server。
-
-### Step 4（Windows 選用）：安裝 Skill 快捷指令
+Windows 上的系統音訊捕捉（含藍芽耳機）需要 Python 套件：
 
 ```bash
-npx meeting-notes-mcp --install-skill
+# 確認已安裝 Python 3.x
+python --version
+
+# 安裝音訊套件（注意：numpy 需 < 2.0）
+pip install soundcard "numpy<2.0"
 ```
 
-安裝後可使用 `/meeting` 指令快速操作。
+> 若尚未安裝 Python，請至 [https://www.python.org/downloads/](https://www.python.org/downloads/) 下載安裝。
 
-### 從 GitHub 原始碼安裝
+### Step 3：從 GitHub 原始碼安裝（目前版本）
 
 ```bash
 # 1. Clone 並編譯
@@ -62,8 +52,28 @@ cd meeting-notes-mcp
 npm install
 npm run build
 
-# 2. 註冊到 Claude Code
+# 2. 註冊到 Claude Code（將路徑替換為你的實際路徑）
 claude mcp add meeting-notes -s user -e DEEPGRAM_API_KEY=你的_DEEPGRAM_API_KEY -- node /你的路徑/meeting-notes-mcp/dist/index.js
+```
+
+### Step 4：重啟 Claude Code
+
+安裝後需要**重啟 Claude Code** 才會載入新的 MCP Server。
+
+### Step 5（選用）：安裝 Skill 快捷指令
+
+```bash
+node dist/index.js --install-skill
+```
+
+安裝後可使用 `/meeting` 指令快速操作。
+
+---
+
+### 透過 npm 安裝（穩定版）
+
+```bash
+claude mcp add meeting-notes -s user -e DEEPGRAM_API_KEY=你的_DEEPGRAM_API_KEY -- npx meeting-notes-mcp
 ```
 
 ## Usage
@@ -137,18 +147,23 @@ claude mcp add meeting-notes -s user -e DEEPGRAM_API_KEY=你的_DEEPGRAM_API_KEY
 
 | 平台 | 最低版本 | 系統音訊擷取方式 | 藍芽耳機相容 |
 |------|----------|----------------|------------|
-| Windows | 10+ | PortAudio WDM-KS loopback | ✅ 自動偵測 |
+| Windows | 10+ | Python WASAPI Loopback + naudiodon | ✅ 完整支援 |
 | macOS | 13+ | ScreenCaptureKit（FFmpeg） | 需安裝 BlackHole |
 
 > **Linux**：次要支援，使用 PulseAudio。
 
 ### Windows 音訊擷取原理
 
-v0.3.0 起 Windows 改用 **PortAudio WDM-KS loopback** 錄製系統音訊：
+v0.4.0 起 Windows 改用 **Python WASAPI Loopback** 錄製系統音訊：
 
-- **不需要** Stereo Mix、VB-CABLE 等額外設定
-- **自動切換**：使用電腦喇叭時錄喇叭，接藍芽耳機時自動切到藍芽 loopback
-- **藍芽麥克風**：藍芽耳機的麥克風也自動偵測使用
+- **完整藍芽支援**：透過 Windows Core Audio API `AUDCLNT_STREAMFLAGS_LOOPBACK`，可鏡像捕捉任何輸出裝置（喇叭、藍芽耳機、HDMI）的音訊
+- **不影響播放**：WASAPI shared loopback 模式，捕捉音訊的同時正常播放不受影響
+- **自動跟隨**：自動偵測當前預設輸出裝置，切換耳機後重新開始錄音即可
+- **麥克風**：藍芽耳機麥克風透過 naudiodon（WASAPI input）自動偵測
+
+#### 為什麼需要 Python？
+
+PortAudio（naudiodon）使用 WDM-KS exclusive 模式，當系統正在播放音訊給藍芽耳機時，裝置已被佔用，PortAudio 無法進入。Windows 的 WASAPI Loopback 使用 shared 模式解決了這個問題，Python 的 `soundcard` 套件直接封裝了這個 Windows API。
 
 ## Troubleshooting
 
@@ -182,6 +197,16 @@ claude mcp add meeting-notes -s user -e DEEPGRAM_API_KEY=你的完整Key -- npx 
 
 重新開始一次錄音（`/meeting` 重新呼叫），系統會在 `start_recording` 時重新偵測當前輸出裝置。
 
+### Windows：系統音訊錄不到（Python 相關錯誤）
+
+確認已安裝 Python 套件：
+
+```bash
+pip install soundcard "numpy<2.0"
+```
+
+注意：`numpy 2.x` 與 `soundcard 0.4.5` 不相容，必須使用 `numpy<2.0`。
+
 ## FAQ
 
 ### Q: 需要自己安裝 FFmpeg 嗎？
@@ -209,7 +234,7 @@ Whisper 在靜音時有「幻覺」問題（會憑空產生文字），Deepgram 
 - **Runtime:** Node.js 20+
 - **Language:** TypeScript
 - **Protocol:** [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) SDK
-- **Audio (Windows):** PortAudio via [naudiodon](https://github.com/Streampunk/naudiodon)（WDM-KS loopback）
+- **Audio (Windows):** Python [soundcard](https://github.com/bastibe/SoundCard)（WASAPI loopback）+ [naudiodon](https://github.com/Streampunk/naudiodon)（mic）
 - **Audio (macOS/Linux):** FFmpeg via ffmpeg-static
 - **STT:** [Deepgram Nova-2](https://deepgram.com) API
 - **Export:** docx
