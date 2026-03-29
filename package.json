@@ -1,6 +1,6 @@
 {
   "name": "meeting-notes-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "MCP Server for recording meetings and generating notes in Claude Code",
   "bin": {
     "meeting-notes-mcp": "./dist/index.js"
@@ -18,18 +18,31 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
+    "docx": "^9.2.0",
     "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.3",
-    "docx": "^9.2.0"
+    "naudiodon": "^2.3.6"
   },
   "devDependencies": {
-    "typescript": "^5.7.3",
-    "tsx": "^4.19.4",
-    "vitest": "^3.1.1",
+    "@types/fluent-ffmpeg": "^2.1.27",
     "@types/node": "^22.14.0",
-    "@types/fluent-ffmpeg": "^2.1.27"
+    "tsx": "^4.19.4",
+    "typescript": "^5.7.3",
+    "vitest": "^3.1.1"
   },
-  "files": ["dist", "skills", "README.md", "LICENSE"],
-  "keywords": ["mcp", "meeting", "notes", "whisper", "groq", "claude-code"],
+  "files": [
+    "dist",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "mcp",
+    "meeting",
+    "notes",
+    "whisper",
+    "groq",
+    "claude-code"
+  ],
   "license": "MIT"
 }

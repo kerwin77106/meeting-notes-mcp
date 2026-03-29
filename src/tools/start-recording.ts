@@ -2,6 +2,7 @@ import { SessionManager } from '../session/session-manager.js';
 import { Settings } from '../config/settings.js';
 import { DeviceDetector } from '../audio/device-detector.js';
 import { FFmpegRecorder } from '../audio/ffmpeg-recorder.js';
+import { NaudiodonRecorder } from '../audio/naudiodon-recorder.js';
 import { Chunker } from '../audio/chunker.js';
 import { TranscriptionQueue } from '../stt/transcription-queue.js';
 import type { McpToolResponse, SupportedLanguage } from '../types.js';
@@ -120,44 +121,68 @@ export const startRecordingTool = {
     const session = sessionManager.createSession(meetingName.trim(), participants, language);
 
     try {
-      // 6. 偵測音訊裝置
-      const devices = await DeviceDetector.detectDevices();
-      const systemDevice = devices.find((d) => d.type === 'system');
-      const micDevice = devices.find((d) => d.type === 'microphone');
-
-      if (!systemDevice && !micDevice) {
-        sessionManager.updateStatus(session.sessionId, 'ERROR');
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ error: 'AUDIO_DEVICE_NOT_FOUND', message: '偵測不到任何音訊裝置，請檢查系統音訊設定' }) }],
-          isError: true,
-        };
-      }
-
-      // 7. 啟動 FFmpegRecorder（降級模式）
-      const recorder = new FFmpegRecorder({
-        platform: process.platform,
-        systemDevice: systemDevice?.name,
-        microphoneDevice: micDevice?.name,
-      });
-
       let pcmStream: NodeJS.ReadableStream;
       let warning: string | undefined;
 
-      if (systemDevice && micDevice) {
-        // 混合錄音
-        pcmStream = await recorder.startMixed();
-      } else if (systemDevice) {
-        // 僅系統音訊
-        pcmStream = await recorder.startSystemAudio();
-        warning = '未偵測到麥克風裝置，僅錄製系統音訊';
-      } else {
-        // 僅麥克風
-        pcmStream = await recorder.startMicrophone();
-        warning = '未偵測到系統音訊裝置，僅錄製麥克風';
-      }
+      if (process.platform === 'win32') {
+        // Windows：使用 naudiodon (PortAudio) 支援藍芽耳機 loopback
+        const { recorder, warning: w } = NaudiodonRecorder.detect();
+        warning = w;
 
-      // 保存 recorder 引用至 session
-      session.recorder = recorder;
+        const { loopbackDevice, micDevice } = recorder as unknown as {
+          loopbackDevice: object | null;
+          micDevice: object | null;
+        };
+
+        if (!loopbackDevice && !micDevice) {
+          sessionManager.updateStatus(session.sessionId, 'ERROR');
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: 'AUDIO_DEVICE_NOT_FOUND', message: '偵測不到任何音訊裝置，請檢查系統音訊設定' }) }],
+            isError: true,
+          };
+        }
+
+        if (loopbackDevice && micDevice) {
+          pcmStream = await recorder.startMixed();
+        } else if (loopbackDevice) {
+          pcmStream = await recorder.startSystemAudio();
+        } else {
+          pcmStream = await recorder.startMicrophone();
+        }
+
+        session.recorder = recorder;
+      } else {
+        // macOS / Linux：保留 FFmpegRecorder
+        const devices = await DeviceDetector.detectDevices();
+        const systemDevice = devices.find((d) => d.type === 'system');
+        const micDevice = devices.find((d) => d.type === 'microphone');
+
+        if (!systemDevice && !micDevice) {
+          sessionManager.updateStatus(session.sessionId, 'ERROR');
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: 'AUDIO_DEVICE_NOT_FOUND', message: '偵測不到任何音訊裝置，請檢查系統音訊設定' }) }],
+            isError: true,
+          };
+        }
+
+        const recorder = new FFmpegRecorder({
+          platform: process.platform,
+          systemDevice: systemDevice?.name,
+          microphoneDevice: micDevice?.name,
+        });
+
+        if (systemDevice && micDevice) {
+          pcmStream = await recorder.startMixed();
+        } else if (systemDevice) {
+          pcmStream = await recorder.startSystemAudio();
+          warning = '未偵測到麥克風裝置，僅錄製系統音訊';
+        } else {
+          pcmStream = await recorder.startMicrophone();
+          warning = '未偵測到系統音訊裝置，僅錄製麥克風';
+        }
+
+        session.recorder = recorder;
+      }
 
       // 8. 啟動 Chunker
       const chunker = new Chunker({
