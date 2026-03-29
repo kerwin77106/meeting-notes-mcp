@@ -208,12 +208,23 @@ export const startRecordingTool = {
       });
 
       // 10. 回傳 McpToolResponse
+      // 讀取實際選用的裝置資訊（用於診斷）
+      const recorderInfo = session.recorder as unknown as {
+        loopbackDevice: { id: number; name: string } | null;
+        micDevice: { id: number; name: string } | null;
+      };
       const result: Record<string, unknown> = {
         session_id: session.sessionId,
         status: 'recording',
         meeting_name: meetingName.trim(),
         language,
         started_at: session.startedAt.toISOString(),
+        loopback_device: recorderInfo.loopbackDevice
+          ? `[ID:${recorderInfo.loopbackDevice.id}] ${recorderInfo.loopbackDevice.name}`
+          : null,
+        mic_device: recorderInfo.micDevice
+          ? `[ID:${recorderInfo.micDevice.id}] ${recorderInfo.micDevice.name}`
+          : null,
       };
 
       if (warning) {

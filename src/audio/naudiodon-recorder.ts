@@ -4,7 +4,8 @@ import { AudioRecorder } from './recorder.js';
 import { NaudiodonDeviceDetector, LoopbackDevice, MicDevice } from './naudiodon-device-detector.js';
 import { Resampler } from './resampler.js';
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 const naudiodon = require('naudiodon');
 
 /** 目標輸出規格（與 Chunker 相容） */
@@ -36,18 +37,21 @@ export class NaudiodonRecorder implements AudioRecorder {
 
   private detectedWarning?: string;
 
-  constructor(loopback: LoopbackDevice | null, mic: MicDevice | null, warning?: string) {
+  private loopbackCandidates: LoopbackDevice[] = [];
+
+  constructor(loopback: LoopbackDevice | null, mic: MicDevice | null, warning?: string, loopbackCandidates: LoopbackDevice[] = []) {
     this.loopbackDevice = loopback;
     this.micDevice = mic;
     this.detectedWarning = warning;
+    this.loopbackCandidates = loopbackCandidates;
   }
 
   /**
    * 工廠方法：自動偵測裝置並建立 NaudiodonRecorder。
    */
   static detect(): { recorder: NaudiodonRecorder; warning?: string } {
-    const { loopback, mic, warning } = NaudiodonDeviceDetector.detect();
-    return { recorder: new NaudiodonRecorder(loopback, mic, warning), warning };
+    const { loopback, loopbackCandidates, mic, warning } = NaudiodonDeviceDetector.detect();
+    return { recorder: new NaudiodonRecorder(loopback, mic, warning, loopbackCandidates), warning };
   }
 
   async startMixed(): Promise<NodeJS.ReadableStream> {
@@ -141,11 +145,27 @@ export class NaudiodonRecorder implements AudioRecorder {
   // ---- 內部方法 ----
 
   private startLoopbackStream(): void {
-    const dev = this.loopbackDevice!;
+    // 依優先順序嘗試所有 loopback 候選，遇到錯誤自動換下一個
+    const candidates = this.loopbackCandidates.length > 0
+      ? this.loopbackCandidates
+      : (this.loopbackDevice ? [this.loopbackDevice] : []);
+
+    for (const dev of candidates) {
+      if (this.tryOpenLoopback(dev)) {
+        this.loopbackDevice = dev;
+        return;
+      }
+    }
+
+    console.error('[NaudiodonRecorder] All loopback candidates failed');
+    this.hasLoopback = false;
+  }
+
+  private tryOpenLoopback(dev: LoopbackDevice): boolean {
     const channels = Math.min(dev.channels, 2);
 
     try {
-      this.loopbackStream = new naudiodon.AudioIO({
+      const stream = new naudiodon.AudioIO({
         inOptions: {
           channelCount: channels,
           sampleFormat: naudiodon.SampleFormat16Bit,
@@ -155,7 +175,7 @@ export class NaudiodonRecorder implements AudioRecorder {
         },
       });
 
-      this.loopbackStream.on('data', (chunk: Buffer) => {
+      stream.on('data', (chunk: Buffer) => {
         if (!this.isRecording || !this.output) return;
         let pcm = chunk;
 
@@ -176,15 +196,19 @@ export class NaudiodonRecorder implements AudioRecorder {
         }
       });
 
-      this.loopbackStream.on('error', (err: Error) => {
-        console.error('[NaudiodonRecorder] Loopback error:', err.message);
+      stream.on('error', (err: Error) => {
+        console.error(`[NaudiodonRecorder] Loopback error (${dev.name}):`, err.message);
         this.hasLoopback = false;
       });
 
-      this.loopbackStream.start();
+      stream.start();
+      this.loopbackStream = stream;
+      console.error(`[NaudiodonRecorder] Loopback opened: [ID:${dev.id}] ${dev.name}`);
+      return true;
     } catch (err) {
-      console.error('[NaudiodonRecorder] Failed to open loopback device:', err);
-      this.hasLoopback = false;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[NaudiodonRecorder] Skipping [ID:${dev.id}] ${dev.name}: ${msg}`);
+      return false;
     }
   }
 
@@ -233,11 +257,13 @@ export class NaudiodonRecorder implements AudioRecorder {
 
   /**
    * 嘗試混音：取兩個緩衝區最小的共同長度進行混音並輸出。
+   * 若其中一路遠超另一路（超過 1 秒），用 0 補齊較慢的一路，避免資料卡住。
    * 為避免緩衝區過大（一路超前太多），設定上限 640KB。
    */
   private tryMix(): void {
     const MAX_BUFFER = 640 * 1024;
-    const available = Math.min(this.sysBuffer.length, this.micBuffer.length);
+    // 16kHz, 16-bit, mono → 32000 bytes/sec → 1 秒 = 32000 bytes
+    const SYNC_THRESHOLD = 32000;
 
     // 緩衝區超過上限：捨棄過多的資料（避免記憶體爆炸）
     if (this.sysBuffer.length > MAX_BUFFER) {
@@ -247,17 +273,34 @@ export class NaudiodonRecorder implements AudioRecorder {
       this.micBuffer = this.micBuffer.subarray(this.micBuffer.length - MAX_BUFFER);
     }
 
-    if (available < 2 || !this.output) return;
+    if (!this.output) return;
 
-    const mixed = Resampler.mix(
-      this.sysBuffer.subarray(0, available),
-      this.micBuffer.subarray(0, available),
-    );
+    const available = Math.min(this.sysBuffer.length, this.micBuffer.length);
 
-    this.sysBuffer = this.sysBuffer.subarray(available);
-    this.micBuffer = this.micBuffer.subarray(available);
-
-    this.output.push(mixed);
+    if (available >= 2) {
+      // 兩路都有資料：正常混音
+      const mixed = Resampler.mix(
+        this.sysBuffer.subarray(0, available),
+        this.micBuffer.subarray(0, available),
+      );
+      this.sysBuffer = this.sysBuffer.subarray(available);
+      this.micBuffer = this.micBuffer.subarray(available);
+      this.output.push(mixed);
+    } else if (this.sysBuffer.length > SYNC_THRESHOLD) {
+      // 僅 loopback 有資料（mic 沒跟上）：用 0 補齊 mic，輸出 loopback
+      const len = this.sysBuffer.length - SYNC_THRESHOLD;
+      const padding = Buffer.alloc(len);
+      const mixed = Resampler.mix(this.sysBuffer.subarray(0, len), padding);
+      this.sysBuffer = this.sysBuffer.subarray(len);
+      this.output.push(mixed);
+    } else if (this.micBuffer.length > SYNC_THRESHOLD) {
+      // 僅 mic 有資料（loopback 沒跟上）：用 0 補齊 loopback，輸出 mic
+      const len = this.micBuffer.length - SYNC_THRESHOLD;
+      const padding = Buffer.alloc(len);
+      const mixed = Resampler.mix(padding, this.micBuffer.subarray(0, len));
+      this.micBuffer = this.micBuffer.subarray(len);
+      this.output.push(mixed);
+    }
   }
 
   private flushMix(): void {

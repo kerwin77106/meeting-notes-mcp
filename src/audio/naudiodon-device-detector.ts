@@ -1,4 +1,5 @@
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 const naudiodon = require('naudiodon') as NaudiodonModule;
 
 interface NaudiodonDevice {
@@ -29,7 +30,10 @@ export interface MicDevice {
 }
 
 export interface DetectedAudioDevices {
+  /** 主要 loopback 裝置（第一候選） */
   loopback: LoopbackDevice | null;
+  /** 所有 loopback 候選（依優先順序），Recorder 可逐一嘗試開啟 */
+  loopbackCandidates: LoopbackDevice[];
   mic: MicDevice | null;
   warning?: string;
 }
@@ -42,78 +46,84 @@ export class NaudiodonDeviceDetector {
   static detect(): DetectedAudioDevices {
     const all = naudiodon.getDevices() as NaudiodonDevice[];
 
-    const loopback = NaudiodonDeviceDetector.findLoopback(all);
+    const loopbackCandidates = NaudiodonDeviceDetector.findLoopbackCandidates(all);
+    const loopback = loopbackCandidates[0] ?? null;
     const mic = NaudiodonDeviceDetector.findMic(all);
 
     let warning: string | undefined;
-    if (!loopback && !mic) {
+    if (loopbackCandidates.length === 0 && !mic) {
       warning = '偵測不到任何音訊裝置';
-    } else if (!loopback) {
+    } else if (loopbackCandidates.length === 0) {
       warning = '未偵測到系統音訊裝置，僅錄製麥克風';
     } else if (!mic) {
       warning = '未偵測到麥克風裝置，僅錄製系統音訊';
     }
 
-    return { loopback, mic, warning };
+    return { loopback, loopbackCandidates, mic, warning };
   }
 
   // ---- 內部方法 ----
 
   /**
-   * 找出系統音訊 Loopback 裝置。
-   * 優先順序：藍芽 A2DP loopback → Realtek 喇叭 loopback → 任意 WDM-KS loopback
+   * 找出所有系統音訊 Loopback 候選裝置（依優先順序排列）。
+   * Recorder 會依序嘗試開啟，遇到 "Invalid device" 或其他錯誤時自動換下一個。
+   *
+   * 優先順序：
+   *   1. 藍芽 A2DP WDM-KS loopback（btha2dp）
+   *   2. WDM-KS 立體聲混音（藍芽模式下 WASAPI 被鎖定時有效）
+   *   3. WASAPI Stereo Mix（非藍芽最可靠）
+   *   4. MME Stereo Mix
+   *   5. WDM-KS 電腦喇叭 loopback（部分系統有效）
    */
-  private static findLoopback(devices: NaudiodonDevice[]): LoopbackDevice | null {
-    // WDM-KS 且有輸入聲道（表示支援 loopback 捕捉）
-    const candidates = devices.filter(
-      (d) => d.hostAPIName === 'Windows WDM-KS' && d.maxInputChannels > 0,
-    );
+  private static findLoopbackCandidates(devices: NaudiodonDevice[]): LoopbackDevice[] {
+    const result: LoopbackDevice[] = [];
+    const seen = new Set<number>();
 
-    // 1. 藍芽 A2DP loopback（btha2dp 是 Windows 藍芽 A2DP 驅動）
-    const btLoopback = candidates.find((d) =>
-      d.name.toLowerCase().includes('btha2dp'),
-    );
-    if (btLoopback) {
-      return {
-        id: btLoopback.id,
-        name: btLoopback.name,
-        sampleRate: btLoopback.defaultSampleRate,
-        channels: btLoopback.maxInputChannels,
-      };
-    }
+    const add = (d: NaudiodonDevice) => {
+      if (!seen.has(d.id)) {
+        seen.add(d.id);
+        result.push({ id: d.id, name: d.name, sampleRate: d.defaultSampleRate, channels: d.maxInputChannels });
+      }
+    };
 
-    // 2. Realtek 喇叭 loopback（有 output 字樣的 WDM-KS 輸入裝置）
-    const realtekLoopback = candidates.find(
-      (d) =>
+    const stereoMixKeywords = ['stereo mix', '立體聲混音'];
+    const micKeywords = ['microphone', 'mic', '麥克風', '麥克風排列'];
+
+    // 1. 藍芽 A2DP WDM-KS loopback
+    devices.filter(
+      (d) => d.hostAPIName === 'Windows WDM-KS' && d.maxInputChannels > 0 && d.name.toLowerCase().includes('btha2dp'),
+    ).forEach(add);
+
+    // 2. WASAPI Stereo Mix（非藍芽最可靠，WDM-KS 立體聲混音雖可開啟但通常不產生資料）
+    devices.filter(
+      (d) => d.hostAPIName === 'Windows WASAPI' && d.maxInputChannels > 0 &&
+        stereoMixKeywords.some((kw) => d.name.toLowerCase().includes(kw)),
+    ).forEach(add);
+
+    // 3. MME Stereo Mix
+    devices.filter(
+      (d) => d.hostAPIName === 'MME' && d.maxInputChannels > 0 &&
+        stereoMixKeywords.some((kw) => d.name.toLowerCase().includes(kw)),
+    ).forEach(add);
+
+    // 4. WDM-KS 立體聲混音（藍芽或特殊狀態下有效，但開啟後不一定有資料）
+    devices.filter(
+      (d) => d.hostAPIName === 'Windows WDM-KS' && d.maxInputChannels > 0 &&
+        stereoMixKeywords.some((kw) => d.name.toLowerCase().includes(kw)),
+    ).forEach(add);
+
+    // 5. WDM-KS 電腦喇叭 loopback（部分系統有效）
+    const wdmLoopbacks = devices.filter(
+      (d) => d.hostAPIName === 'Windows WDM-KS' && d.maxInputChannels > 0 &&
+        !micKeywords.some((kw) => d.name.toLowerCase().includes(kw)) &&
         d.name.toLowerCase().includes('realtek') &&
         (d.name.toLowerCase().includes('output') || d.name.includes('喇叭') || d.name.includes('電腦喇叭')),
     );
-    if (realtekLoopback) {
-      return {
-        id: realtekLoopback.id,
-        name: realtekLoopback.name,
-        sampleRate: realtekLoopback.defaultSampleRate,
-        channels: realtekLoopback.maxInputChannels,
-      };
-    }
+    // 主輸出優先（不含 "2nd"）
+    [...wdmLoopbacks.filter((d) => !d.name.toLowerCase().includes('2nd')),
+      ...wdmLoopbacks.filter((d) => d.name.toLowerCase().includes('2nd'))].forEach(add);
 
-    // 3. Fallback：任何有 output/speakers 關鍵字的 WDM-KS 輸入
-    const fallback = candidates.find(
-      (d) =>
-        d.name.toLowerCase().includes('output') ||
-        d.name.toLowerCase().includes('speakers') ||
-        d.name.includes('喇叭'),
-    );
-    if (fallback) {
-      return {
-        id: fallback.id,
-        name: fallback.name,
-        sampleRate: fallback.defaultSampleRate,
-        channels: fallback.maxInputChannels,
-      };
-    }
-
-    return null;
+    return result;
   }
 
   /**
