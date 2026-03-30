@@ -84,9 +84,9 @@ claude mcp add meeting-notes -s user -e DEEPGRAM_API_KEY=你的_DEEPGRAM_API_KEY
 
 | 你輸入 | Claude 會做什麼 |
 |--------|----------------|
-| `幫我開始錄音，會議名稱是「週會」` | 呼叫 `start_recording`，開始錄音 |
+| `幫我開始錄音` | 呼叫 `start_recording`，立即開始錄音 |
 | `目前錄音狀態如何？` | 呼叫 `get_transcript`，顯示即時逐字稿 |
-| `停止錄音並生成會議紀錄` | 呼叫 `stop_recording` → Claude 生成紀錄 → `save_notes` 存檔 |
+| `停止錄音並生成會議紀錄` | 呼叫 `stop_recording` → 快速選單填寫資訊 → Claude 生成紀錄 → `save_notes` 存檔 |
 | `列出之前的會議紀錄` | 呼叫 `list_recordings`，顯示歷史紀錄 |
 
 ### 使用 Skill 快捷指令
@@ -95,17 +95,17 @@ claude mcp add meeting-notes -s user -e DEEPGRAM_API_KEY=你的_DEEPGRAM_API_KEY
 
 | 指令 | 說明 |
 |------|------|
-| `/meeting` | 開始會議錄音（互動式輸入會議名稱、參與者、語言） |
-| `/meeting stop` | 停止錄音並生成會議紀錄 |
+| `/meeting` | 立即開始錄音（無需事先輸入任何資訊） |
+| `/meeting stop` | 停止錄音，用快速選單填寫會議資訊，生成並存檔紀錄 |
 | `/meeting status` | 查看即時逐字稿 |
 | `/meeting list` | 列出歷史紀錄 |
 
 ### 基本流程
 
-1. 輸入 `/meeting` 或告訴 Claude「開始錄音」
-2. 依照提示輸入會議名稱與參與者
-3. 開始開會，系統自動錄音並即時轉譯
-4. 會議結束後輸入 `/meeting stop` 或告訴 Claude「停止錄音」
+1. 輸入 `/meeting`，系統**立即開始錄音**，自動以當前時間產生暫定名稱（如 `會議-03月30日-1430`）
+2. 開始開會，系統自動錄音並即時轉譯
+3. 會議結束後輸入 `/meeting stop`
+4. 以**快速選單**填寫會議名稱、語言（數字選擇）、參與者（可跳過）
 5. Claude 自動根據逐字稿生成結構化會議紀錄
 6. 確認內容後自動存檔至 `~/meeting-notes/`
 

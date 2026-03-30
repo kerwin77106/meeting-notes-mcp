@@ -9,25 +9,51 @@ description: 會議錄音與紀錄生成工具
 
 ## 無子指令（開始錄音）
 
-請互動式詢問使用者以下資訊：
-1. 「請輸入會議名稱：」（必填）
-2. 「請輸入參與者（以逗號分隔，可跳過）：」（選填）
-3. 「會議語言？（預設 zh-TW）：」（選填）
+**直接開始錄音，不詢問任何問題。**
 
-收集完畢後，呼叫 MCP Tool `start_recording`，傳入 meeting_name、participants（以逗號 split 為陣列）、language。
+1. 自動產生暫定會議名稱，格式：`會議-MM月DD日-HHmm`（以當前時間產生，例如 `會議-03月30日-1430`）
+2. 立即呼叫 MCP Tool `start_recording`，傳入自動產生的 meeting_name，language 預設 `zh-TW`，participants 留空
+3. 成功後回覆：
 
-成功後回覆：
-已開始錄製「{meeting_name}」
+```
+🎙 錄音已開始
+會議：{自動產生的名稱}
 Session ID: {session_id}
 
-開會完畢後，請輸入 /meeting stop 結束錄音並生成會議紀錄。
-錄音過程中，你可以輸入 /meeting status 查看即時逐字稿。
+開會完畢後輸入 /meeting stop 停止錄音並填寫會議資訊。
+錄音過程中可輸入 /meeting status 查看即時逐字稿。
+```
 
 ## stop（停止錄音並生成紀錄）
 
-1. 先用 `get_transcript` 查詢目前的 active session（不需要使用者提供 session_id，從對話上下文中取得之前 start_recording 回傳的 session_id）
-2. 呼叫 MCP Tool `stop_recording`，傳入該 session_id，取得完整逐字稿
-2. 根據逐字稿，使用以下 Prompt 生成結構化會議紀錄：
+1. 從對話上下文取得 session_id，呼叫 MCP Tool `stop_recording`，取得完整逐字稿與錄音時長
+
+2. 停止後，以快速選單收集會議資訊：
+
+```
+【會議資訊】
+
+會議名稱？（直接 Enter 使用「{自動產生的名稱}」）：
+```
+等待使用者輸入。若直接 Enter，沿用自動名稱。
+
+```
+語言：
+  1) 繁體中文 zh-TW（預設）
+  2) English en
+  3) 日本語 ja
+  4) 한국어 ko
+  5) 简体中文 zh-CN
+請輸入數字（直接 Enter 選 1）：
+```
+等待使用者輸入數字選擇語言。
+
+```
+參與者？（以逗號分隔，可直接 Enter 跳過）：
+```
+等待使用者輸入。
+
+3. 根據逐字稿與填寫的資訊，使用以下 Prompt 生成結構化會議紀錄：
 
 你是一位專業的會議紀錄助理。根據以下逐字稿，請生成結構化的會議紀錄。
 
@@ -57,9 +83,9 @@ Session ID: {session_id}
 ## 逐字稿
 [HH:MM:SS] text...
 
-3. 顯示完整紀錄，詢問使用者是否需要修改
-4. 呼叫 MCP Tool `save_notes` 存檔（format 預設 md）
-5. 顯示儲存路徑
+4. 顯示完整紀錄，詢問使用者是否需要修改
+5. 呼叫 MCP Tool `save_notes` 存檔（format 預設 md）
+6. 顯示儲存路徑
 
 ## status（查看即時狀態）
 
