@@ -239,6 +239,31 @@ Whisper 在靜音時有「幻覺」問題（會憑空產生文字），Deepgram 
 - **STT:** [Deepgram Nova-2](https://deepgram.com) API
 - **Export:** docx
 
+## Publishing (維護者)
+
+每次有更新要發布到 npm，在專案目錄執行：
+
+```powershell
+# patch：小修正 / 功能調整（0.4.1 → 0.4.2）
+npm version patch
+
+# minor：新功能（0.4.1 → 0.5.0）
+npm version minor
+
+# major：破壞性變更（0.4.1 → 1.0.0）
+npm version major
+```
+
+然後 push code + tag：
+
+```powershell
+git push origin main --tags
+```
+
+GitHub Actions 偵測到 `v*` tag 後，會自動 build 並發布到 npm，無需其他操作。
+
+> workflow 設定：`.github/workflows/publish.yml`
+
 ## License
 
 [MIT](LICENSE)

@@ -2,8 +2,9 @@ name: Publish to npm
 
 # 當你在 GitHub 建立 Release 時自動觸發
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   publish:

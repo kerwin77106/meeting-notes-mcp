@@ -13,6 +13,15 @@ npm test -- --run   # 單次執行（不 watch）
 
 編譯輸出在 `dist/`，MCP Server 入口為 `dist/index.js`。
 
+### 發布新版本到 npm
+
+```powershell
+npm version patch   # 或 minor / major，自動更新 package.json 並建立 git tag
+git push origin main --tags   # push 後 GitHub Actions 自動發布到 npm
+```
+
+觸發條件：push `v*` 格式的 tag（`.github/workflows/publish.yml`）。
+
 ## Architecture
 
 ### 整體資料流
